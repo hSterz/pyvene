@@ -135,6 +135,7 @@ class BaseModel(nn.Module):
                     component_dim *= int(representation.max_number_of_units)
                 all_metadata["embed_dim"] = component_dim
                 all_metadata["use_fast"] = self.use_fast
+                all_metadata["invert"] = getattr(representation, "invert", False)
                 intervention = intervention_function(
                     **all_metadata
                 )
@@ -1522,6 +1523,12 @@ class IntervenableModel(BaseModel):
                 ]  # batch_size
 
             def hook_callback(model, args, kwargs, output=None):
+                attention_mask = None
+                if len(args) > 1:
+                    attention_mask = args[1]
+                    if len(attention_mask.shape) > 2:
+                        attention_mask = attention_mask[:, 0, 0, :].bool().logical_not()
+
                 # if it is None, we use it as adaptor.
                 if unit_locations_base[key_i] is not None and self._is_generation:
                     is_prompt = self._key_setter_call_counter[key] == 0
@@ -1553,6 +1560,7 @@ class IntervenableModel(BaseModel):
                         None,
                         intervention,
                         subspaces[key_i] if subspaces is not None else None,
+                        attention_mask
                     )
                     # fail if this is not a fresh collect
                     assert key not in self.activations
@@ -1568,6 +1576,7 @@ class IntervenableModel(BaseModel):
                                 None,
                                 intervention,
                                 subspaces[key_i] if subspaces is not None else None,
+                                attention_mask
                             )
                             if isinstance(raw_intervened_representation, InterventionOutput):
                                 self.full_intervention_outputs.append(raw_intervened_representation)
@@ -1584,6 +1593,7 @@ class IntervenableModel(BaseModel):
                                 ),
                                 intervention,
                                 subspaces[key_i] if subspaces is not None else None,
+                                attention_mask
                             )
                     else:
                         # highly unlikely it's a primitive intervention type
@@ -1596,6 +1606,7 @@ class IntervenableModel(BaseModel):
                             ),
                             intervention,
                             subspaces[key_i] if subspaces is not None else None,
+                            attention_mask
                         )
                     if intervened_representation is None:
                         return
